@@ -12,6 +12,14 @@ It uses a bounded asynchronous pipeline: query log events are received, optional
 
 > Last tested with Technitium DNS Server 15.6.2.
 
+## DNSTap integration (development branch)
+
+The next release will support DNSTap as an additional output. P1/P2 introduce an **opt-in** in-memory observation snapshot and a tested converter to the Dnstap.NET 0.2.0 record model. The adapter and `sinks.dnstap` configuration are not implemented yet: this branch does **not** emit DNSTap traffic.
+
+The capture uses `DnsDatagram.WriteTo(Stream)` to serialize the query and response. These are valid serialized DNS messages, **not guaranteed bit-for-bit copies of the original network packets**. It preserves the client address and source port plus the completed-response timestamp. The local responder endpoint and query timestamp are not exposed by `IDnsQueryLogger` and are left unset. CLIENT_RESPONSE describes the client-facing reply rather than upstream recursive activity. Packet serialization is disabled by default and leaves existing JSON exports unchanged.
+
+This adds the `Dnstap.NET` 0.2.0 package dependency, which is restored from the authenticated DeltaZulu GitHub Packages feed. CI needs `packages: read` access to that package.
+
 ## Features
 
 - Receives completed DNS queries and responses through the Technitium DNS Server `IDnsQueryLogger` interface.

@@ -5,8 +5,10 @@ on:
 
 permissions:
   contents: read
+  packages: read
 
 env:
+  NuGetPackageSourceCredentials_deltazulu-github: Username=${{ github.actor }};Password=${{ secrets.GITHUB_TOKEN }};ValidAuthenticationTypes=Basic
   APP_NAME: ${{ github.event.repository.name }}
 
 jobs:
@@ -104,6 +106,7 @@ jobs:
 
     permissions:
       contents: write
+      packages: read
 
     steps:
       - name: Checkout

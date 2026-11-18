@@ -32,7 +32,7 @@ public sealed class DnstapRecordConverterTests
             DnsTransportProtocol.Udp, query, response, captureDnstap: true);
 
         var record = DnstapRecordConverter.Convert(entry);
-        Assert.AreEqual(Dnstap.Types.Type.Message, record.Type);
+        Assert.AreEqual(global::Dnstap.Dnstap.Types.Type.Message, record.Type);
         Assert.AreEqual(Message.Types.Type.ClientResponse, record.Message.Type);
         Assert.AreEqual(SocketFamily.Inet, record.Message.SocketFamily);
         Assert.AreEqual(SocketProtocol.Udp, record.Message.SocketProtocol);

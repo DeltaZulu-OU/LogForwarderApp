@@ -13,6 +13,10 @@ on:
 
 permissions:
   contents: read
+  packages: read
+
+env:
+  NuGetPackageSourceCredentials_deltazulu-github: Username=${{ github.actor }};Password=${{ secrets.GITHUB_TOKEN }};ValidAuthenticationTypes=Basic
 
 concurrency:
   group: integration-${{ github.ref }}
