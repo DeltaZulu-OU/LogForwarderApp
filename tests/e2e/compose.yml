@@ -21,7 +21,7 @@ services:
     volumes:
       - ./results:/results
     healthcheck:
-      test: ["CMD-SHELL", "grep -q ':1770 ' /proc/net/tcp"]
+      test: ["CMD-SHELL", "grep -q ':1770 ' /proc/net/tcp /proc/net/tcp6"]
       interval: 2s
       timeout: 2s
       retries: 20
