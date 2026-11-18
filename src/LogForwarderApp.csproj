@@ -25,6 +25,7 @@
     <PackageReference Include="Serilog.Sinks.SyslogMessages" Version="4.1.0" />
     <PackageReference Include="Serilog.Sinks.ClickHouse" Version="2.3.0" />
     <PackageReference Include="Dnstap.NET" Version="0.2.0" />
+    <PackageReference Include="Serilog.Sinks.Dnstap" Version="0.1.0" />
   </ItemGroup>
 
   <ItemGroup>

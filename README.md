@@ -14,11 +14,13 @@ It uses a bounded asynchronous pipeline: query log events are received, optional
 
 ## DNSTap integration (development branch)
 
-The next release will support DNSTap as an additional output. P1/P2 introduce an **opt-in** in-memory observation snapshot and a tested converter to the Dnstap.NET 0.2.0 record model. The adapter and `sinks.dnstap` configuration are not implemented yet: this branch does **not** emit DNSTap traffic.
+The next release will support DNSTap as an additional output. P1/P2 introduce an **opt-in** in-memory observation snapshot and a tested converter to the Dnstap.NET 0.2.0 record model. The TCP adapter and optional `sinks.dnstap` configuration are implemented on this branch. The adapter sends typed records directly through `Serilog.Sinks.Dnstap` 0.1.0, using the existing independent LogForwarder sink worker without another queue or automatic batch replay.
 
 The capture uses `DnsDatagram.WriteTo(Stream)` to serialize the query and response. These are valid serialized DNS messages, **not guaranteed bit-for-bit copies of the original network packets**. It preserves the client address and source port plus the completed-response timestamp. The local responder endpoint and query timestamp are not exposed by `IDnsQueryLogger` and are left unset. CLIENT_RESPONSE describes the client-facing reply rather than upstream recursive activity. Packet serialization is disabled by default and leaves existing JSON exports unchanged.
 
-This adds the `Dnstap.NET` 0.2.0 package dependency, which is restored from the authenticated DeltaZulu GitHub Packages feed. CI needs `packages: read` access to that package.
+This adds the `Dnstap.NET` 0.2.0 and `Serilog.Sinks.Dnstap` 0.1.0 package dependencies, restored from the authenticated DeltaZulu GitHub Packages feed. CI needs `packages: read` access to that package.
+
+The DNSTap TCP configuration is optional and defaults to disabled. Example: `"dnstap": { "enabled": true, "host": "127.0.0.1", "port": 6000, "connectionTimeoutMs": 10000, "operationTimeoutMs": 30000, "reconnectIntervalMs": 5000, "batching": { "batchSize": 1000, "batchDelayMs": 25, "retryTimeLimitMs": 0 } }`. The sink must not replay batches because a failure can occur after some frames have been delivered. DNS capture is activated only after the sink has registered successfully. `IOutputSink.ForwardAsync` has a cancellation token, but the underlying Serilog batch API has no cancellation parameter; the 30-second application drain is not a strict bound on DNSTap shutdown.
 
 ## Features
 

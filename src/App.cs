@@ -43,14 +43,16 @@ namespace LogForwarder
 
         private sealed class IngestionState
         {
-            public IngestionState(Channel<LogEntry> channel, bool enableEdnsLogging)
+            public IngestionState(Channel<LogEntry> channel, bool enableEdnsLogging, bool captureDnstap)
             {
                 Channel = channel;
                 EnableEdnsLogging = enableEdnsLogging;
+                CaptureDnstap = captureDnstap;
             }
 
             public Channel<LogEntry> Channel { get; }
             public bool EnableEdnsLogging { get; }
+            public bool CaptureDnstap { get; }
         }
 
         private readonly SemaphoreSlim _lifecycleLock = new SemaphoreSlim(1, 1);
@@ -168,10 +170,11 @@ namespace LogForwarder
                 // failures remain sink-local and are handled by ConfigureSinks().
                 await StopPipelineAsync().ConfigureAwait(false);
 
+                bool captureDnstap;
                 try
                 {
                     ConfigurePipeline(nextConfig.Pipeline);
-                    ConfigureSinks(nextConfig.Sinks);
+                    captureDnstap = ConfigureSinks(nextConfig.Sinks);
                 }
                 catch (Exception ex)
                 {
@@ -213,7 +216,7 @@ namespace LogForwarder
 
                 Volatile.Write(
                     ref _ingestionState,
-                    new IngestionState(transformChannel, nextConfig.Sinks.EnableEdnsLogging));
+                    new IngestionState(transformChannel, nextConfig.Sinks.EnableEdnsLogging, captureDnstap));
             }
             finally
             {
@@ -245,7 +248,8 @@ namespace LogForwarder
             try
             {
                 // input -> transform: build LogEntry
-                entry = new LogEntry(timestamp, remoteEP, protocol, request, response, state.EnableEdnsLogging);
+                entry = new LogEntry(timestamp, remoteEP, protocol, request, response,
+                    state.EnableEdnsLogging, state.CaptureDnstap);
             }
             catch (Exception ex)
             {
@@ -409,13 +413,14 @@ namespace LogForwarder
             MaxRetryDelay = TimeSpan.FromMilliseconds(settings?.MaxRetryDelayMs ?? 500)
         };
 
-        private void ConfigureSinks(SinkConfig sinks)
+        private bool ConfigureSinks(SinkConfig sinks)
         {
             ConfigureConsoleSink(sinks.ConsoleSinkConfig, sinks.MaxQueueSize);
             ConfigureFileSink(sinks.FileSinkConfig, sinks.MaxQueueSize);
             ConfigureHttpSink(sinks.HttpSinkConfig, sinks.MaxQueueSize);
             ConfigureClickHouseSink(sinks.ClickHouseSinkConfig, sinks.MaxQueueSize);
             ConfigureSyslogSink(sinks.SyslogSinkConfig, sinks.MaxQueueSize);
+            return ConfigureDnstapSink(sinks.DnstapSinkConfig, sinks.MaxQueueSize);
         }
 
         private void ConfigureConsoleSink(SinkConfig.ConsoleSink? config, int queueCapacity)
@@ -527,6 +532,37 @@ namespace LogForwarder
             {
                 LogUnexpectedSinkFailure("ClickHouse", ex);
             }
+        }
+
+        private bool ConfigureDnstapSink(SinkConfig.DnstapConfig? config, int queueCapacity)
+        {
+            _sinkDispatcher.Remove(typeof(DnstapOutputSink));
+            if (config?.Enabled is not true)
+                return false;
+
+            try
+            {
+                _sinkDispatcher.Add(
+                    new DnstapOutputSink(config.Host!, config.Port,
+                        TimeSpan.FromMilliseconds(config.ConnectionTimeoutMs),
+                        TimeSpan.FromMilliseconds(config.OperationTimeoutMs),
+                        TimeSpan.FromMilliseconds(config.ReconnectIntervalMs),
+                        ex => _dnsServer?.WriteLog(ex)),
+                    BatchOptions(queueCapacity, config.Batching),
+                    ex => _dnsServer?.WriteLog(ex),
+                    message => _dnsServer?.WriteLog(message));
+                return true;
+            }
+            catch (Exception ex) when (ex is ArgumentException or FormatException)
+            {
+                LogSinkDisabled("DNSTap", ex.Message);
+            }
+            catch (Exception ex)
+            {
+                LogUnexpectedSinkFailure("DNSTap", ex);
+            }
+
+            return false;
         }
 
         private void ConfigureSyslogSink(SinkConfig.SyslogSink? config, int queueCapacity)

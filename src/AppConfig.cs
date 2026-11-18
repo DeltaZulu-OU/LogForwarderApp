@@ -70,7 +70,8 @@ namespace LogForwarder
             foreach (var feature in new FeatureBase?[]
             {
                 sinks.ConsoleSinkConfig, sinks.FileSinkConfig,
-                sinks.HttpSinkConfig, sinks.SyslogSinkConfig, sinks.ClickHouseSinkConfig
+                sinks.HttpSinkConfig, sinks.SyslogSinkConfig, sinks.ClickHouseSinkConfig,
+                sinks.DnstapSinkConfig
             })
             {
                 if (feature?.Enabled is not true || feature.Batching is null)
@@ -108,6 +109,13 @@ namespace LogForwarder
                 if (config.Sinks.ClickHouseSinkConfig.AllowBatchReplay)
                     throw new ValidationException(
                         "clickhouse.allowBatchReplay is not supported by the Serilog adapter.");
+            }
+
+            if (config.Sinks.DnstapSinkConfig?.Enabled is true)
+            {
+                ValidateObject(config.Sinks.DnstapSinkConfig);
+                if (config.Sinks.DnstapSinkConfig.AllowBatchReplay)
+                    throw new ValidationException("dnstap.allowBatchReplay is not supported because writes cannot be replayed safely.");
             }
 
             if (config.Sinks.SyslogSinkConfig?.Enabled is true)
@@ -189,6 +197,35 @@ namespace LogForwarder
 
         [JsonPropertyName("clickhouse")]
         public ClickHouseConfig? ClickHouseSinkConfig { get; set; }
+
+        [JsonPropertyName("dnstap")]
+        public DnstapConfig? DnstapSinkConfig { get; set; }
+
+        public class DnstapConfig : FeatureBase
+        {
+            [Required(ErrorMessage = "dnstap.host is required when DNSTap is enabled.")]
+            [JsonPropertyName("host")]
+            public string? Host { get; set; }
+
+            [Range(1, 65535)]
+            [JsonPropertyName("port")]
+            public int Port { get; set; } = 6000;
+
+            [Range(1, int.MaxValue)]
+            [JsonPropertyName("connectionTimeoutMs")]
+            public int ConnectionTimeoutMs { get; set; } = 10000;
+
+            [Range(1, int.MaxValue)]
+            [JsonPropertyName("operationTimeoutMs")]
+            public int OperationTimeoutMs { get; set; } = 30000;
+
+            [Range(1, int.MaxValue)]
+            [JsonPropertyName("reconnectIntervalMs")]
+            public int ReconnectIntervalMs { get; set; } = 5000;
+
+            [JsonPropertyName("allowBatchReplay")]
+            public bool AllowBatchReplay { get; set; }
+        }
 
         public class SyslogSink : FeatureBase
         {
