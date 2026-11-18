@@ -35,10 +35,25 @@ namespace LogForwarder
         private static readonly DnsResourceRecord[] EmptyAnswers = Array.Empty<DnsResourceRecord>();
         private static readonly EDNSLog[] EmptyEdns = Array.Empty<EDNSLog>();
 
-        public LogEntry(DateTime timestamp, IPEndPoint remoteEP, DnsTransportProtocol protocol, DnsDatagram request, DnsDatagram response, bool ednsLogging = false)
+        public LogEntry(DateTime timestamp, IPEndPoint remoteEP, DnsTransportProtocol protocol, DnsDatagram request, DnsDatagram response, bool ednsLogging = false, bool captureDnstap = false)
         {
             // Assign timestamp and ensure it's in UTC
             Timestamp = timestamp.Kind == DateTimeKind.Utc ? timestamp : timestamp.ToUniversalTime();
+
+            // Only serialize DNS messages when DNSTap capture is explicitly requested.
+            // These are reserialized datagrams, not guaranteed original on-wire octets.
+            if (captureDnstap)
+            {
+                try
+                {
+                    DnstapObservation = DnstapObservation.Capture(remoteEP, protocol, request, response);
+                }
+                catch (System.Exception)
+                {
+                    // Packet capture must not interrupt normal DNS query logging.
+                    // P3 will report capture failures through the DNSTap worker.
+                }
+            }
 
             // Set nameserver
             NameServer = request.Metadata.NameServer.Host;
@@ -128,6 +143,10 @@ namespace LogForwarder
 
             return edns?.ToArray() ?? EmptyEdns;
         }
+
+        // Not serialized with existing JSON sinks; no packet capture without explicit opt-in.
+        [JsonIgnore]
+        internal DnstapObservation? DnstapObservation { get; }
 
         public DnsResourceRecord[] Answers { get; }
 
