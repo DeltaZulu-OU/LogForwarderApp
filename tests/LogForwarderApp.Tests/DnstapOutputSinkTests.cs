@@ -37,7 +37,7 @@ public sealed class DnstapOutputSinkTests
         await sink.ForwardAsync([
             TestFixtures.CreateLogEntry("first.example", captureDnstap: true),
             TestFixtures.CreateLogEntry("second.example", captureDnstap: true)
-        ], TestContext.CancellationToken);
+        ], CancellationToken.None);
 
         Assert.AreEqual(1, recorder.Calls);
         Assert.IsNotNull(recorder.Batch);
@@ -58,7 +58,7 @@ public sealed class DnstapOutputSinkTests
         using var sink = new DnstapOutputSink(recorder);
         await sink.ForwardAsync([
             TestFixtures.CreateLogEntry("no-capture.example")
-        ], TestContext.CancellationToken);
+        ], CancellationToken.None);
         Assert.AreEqual(0, recorder.Calls);
     }
 
@@ -69,7 +69,7 @@ public sealed class DnstapOutputSinkTests
         using var sink = new DnstapOutputSink(recorder);
         await Assert.ThrowsExactlyAsync<IOException>(() => sink.ForwardAsync([
             TestFixtures.CreateLogEntry("failed.example", captureDnstap: true)
-        ], TestContext.CancellationToken));
+        ], CancellationToken.None));
         Assert.AreEqual(1, recorder.Calls);
     }
 
@@ -78,7 +78,7 @@ public sealed class DnstapOutputSinkTests
     {
         var recorder = new RecordingBatchSink();
         using var sink = new DnstapOutputSink(recorder);
-        await sink.ForwardAsync([], TestContext.CancellationToken);
+        await sink.ForwardAsync([], CancellationToken.None);
         using var cts = new CancellationTokenSource();
         cts.Cancel();
         await Assert.ThrowsExactlyAsync<OperationCanceledException>(() =>
