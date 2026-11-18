@@ -13,6 +13,19 @@ services:
       timeout: 3s
       retries: 20
 
+  dnstap:
+    build:
+      context: .
+      dockerfile: DnstapCollector.Dockerfile
+    command: ["/bin/sh", "-c", "exec dnstap -j -l 0.0.0.0:6000 >> /results/dnstap.jsonl"]
+    volumes:
+      - ./results:/results
+    healthcheck:
+      test: ["CMD-SHELL", "grep -q ':1770 ' /proc/net/tcp"]
+      interval: 2s
+      timeout: 2s
+      retries: 20
+
   clickhouse:
     image: clickhouse/clickhouse-server:25.8
     environment:
@@ -31,6 +44,8 @@ services:
       collector:
         condition: service_healthy
       clickhouse:
+        condition: service_healthy
+      dnstap:
         condition: service_healthy
     environment:
       DNS_SERVER_DOMAIN: dns.e2e.test

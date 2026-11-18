@@ -2,11 +2,12 @@ name: End-to-End Integration Tests
 
 on:
   push:
-    branches: [master]
+    branches: [master, feature/dnstap-observation-model]
   workflow_dispatch:
   pull_request:
     paths:
       - 'src/**'
+      - 'tests/e2e/**'
       - 'tests/**'
       - '.github/workflows/integration.yml'
       - '.github/scripts/New-ReleasePackage.ps1'
@@ -67,7 +68,7 @@ jobs:
 
       - name: Validate plugin package
         run: |
-          python -c 'import os,zipfile; p=os.environ["E2E_PACKAGE"]; z=zipfile.ZipFile(p); names=set(z.namelist()); required={"LogForwarderApp.dll","LogForwarderApp.deps.json","dnsApp.config","Serilog.Sinks.ClickHouse.dll","ClickHouse.Driver.dll","Serilog.dll"}; assert required.issubset(names), (p, required-names); assert z.testzip() is None'
+          python -c 'import os,zipfile,json; p=os.environ["E2E_PACKAGE"]; z=zipfile.ZipFile(p); names=set(z.namelist()); required={"LogForwarderApp.dll","LogForwarderApp.deps.json","dnsApp.config","Serilog.Sinks.ClickHouse.dll","ClickHouse.Driver.dll","Serilog.dll","Serilog.Sinks.Dnstap.dll","Dnstap.dll","Google.Protobuf.dll"}; assert required.issubset(names), (p, required-names); deps=json.loads(z.read('LogForwarderApp.deps.json')); libraries=deps['libraries']; assert all(any(k.lower().startswith(n.lower()+'/') for k in libraries) for n in ('Serilog.Sinks.Dnstap','Dnstap.NET','Google.Protobuf')), list(libraries); assert z.testzip() is None'
 
       - name: Prepare isolated test environment
         run: |
@@ -78,7 +79,7 @@ jobs:
         run: docker compose -f tests/e2e/compose.yml up --detach --wait --wait-timeout 120
 
       - name: Run live DNS E2E suite
-        run: pytest -q tests/e2e/test_e2e.py tests/e2e/test_clickhouse.py --junitxml=tests/e2e/results/junit.xml
+        run: pytest -q tests/e2e/test_e2e.py tests/e2e/test_clickhouse.py tests/e2e/test_dnstap.py --junitxml=tests/e2e/results/junit.xml
 
       - name: Validate ClickHouse query-result evidence
         run: python tests/e2e/verify_clickhouse_evidence.py
@@ -90,6 +91,7 @@ jobs:
           docker compose -f tests/e2e/compose.yml ps > tests/e2e/results/compose-ps.txt 2>&1 || true
           docker compose -f tests/e2e/compose.yml logs --no-color > tests/e2e/results/compose.log 2>&1 || true
           curl --silent --max-time 5 http://127.0.0.1:18080/state > tests/e2e/results/collector-state.json || true
+          docker compose -f tests/e2e/compose.yml logs --no-color dnstap > tests/e2e/results/dnstap-collector.log 2>&1 || true
 
       - name: Upload E2E evidence
         if: always()

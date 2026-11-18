@@ -1,6 +1,6 @@
 # Live Technitium DNS end-to-end tests
 
-The E2E suite installs the actual release ZIP in a disposable Technitium DNS Server 15.6.2, sends dig queries over UDP and TCP, and validates HTTP NDJSON, file NDJSON, console NDJSON, and RFC 5424 UDP/TCP Syslog, and the official Serilog ClickHouse sink against ClickHouse 25.8. A local pinned fixture is imported into Technitium's blocked zone through its API, without asynchronous blocklist downloads or external feeds. It includes synthetic domains and two pinned examples observed in StevenBlack/hosts (adsflame.com, aircovid19virus.com, checked 2026-11-04); list membership is not independent evidence of maliciousness.
+The E2E suite installs the actual release ZIP in a disposable Technitium DNS Server 15.6.2, sends dig queries over UDP and TCP, and validates HTTP NDJSON, file NDJSON, console NDJSON, and RFC 5424 UDP/TCP Syslog, and the official Serilog ClickHouse sink against ClickHouse 25.8. The suite also tests the DNSTap TCP sink against the independent pinned golang-dnstap receiver. A local pinned fixture is imported into Technitium's blocked zone through its API, without asynchronous blocklist downloads or external feeds. It includes synthetic domains and two pinned examples observed in StevenBlack/hosts (adsflame.com, aircovid19virus.com, checked 2026-11-04); list membership is not independent evidence of maliciousness.
 
 ## CI and local reproduction
 
@@ -51,6 +51,12 @@ untrusted clients must not be permitted to spoof the source address using ECS.
 
 ECS and Extended DNS Errors (EDE) are different EDNS options. Enabling
 ECS source-address handling does not make blocked-zone responses emit EDE 15.
+
+## DNSTap evidence
+
+A separate Docker Compose service compiles the independent `github.com/dnstap/golang-dnstap/dnstap` listener at the pinned source commit used by the DNSTap sink interoperability suite. It receives Frame Streams over TCP port 6000 and writes JSONL to `tests/e2e/results/dnstap.jsonl`. The tests enable DNSTap only for their case, then verify client response type, query name and DNS packet decoding, UDP/TCP transport and that regular HTTP logging continues. They check that disabling DNSTap stops new DNSTap observations while ordinary sinks remain available. The receiver and observed JSONL are retained as E2E artifacts. Captured packets are reserialized DNS datagrams, not guaranteed original on-wire bytes.
+
+The E2E packaging assertion verifies `Serilog.Sinks.Dnstap.dll`, `Dnstap.dll` (the `Dnstap.NET` assembly) and `Google.Protobuf.dll`, together with matching package identities in `.deps.json`. Builds require `packages: read` and authenticated NuGet restore.
 
 ## Scope
 
