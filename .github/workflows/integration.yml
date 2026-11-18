@@ -68,7 +68,7 @@ jobs:
 
       - name: Validate plugin package
         run: |
-          python -c 'import os,zipfile,json; p=os.environ["E2E_PACKAGE"]; z=zipfile.ZipFile(p); names=set(z.namelist()); required={"LogForwarderApp.dll","LogForwarderApp.deps.json","dnsApp.config","Serilog.Sinks.ClickHouse.dll","ClickHouse.Driver.dll","Serilog.dll","Serilog.Sinks.Dnstap.dll","Dnstap.dll","Google.Protobuf.dll"}; assert required.issubset(names), (p, required-names); deps=json.loads(z.read('LogForwarderApp.deps.json')); libraries=deps['libraries']; assert all(any(k.lower().startswith(n.lower()+'/') for k in libraries) for n in ('Serilog.Sinks.Dnstap','Dnstap.NET','Google.Protobuf')), list(libraries); assert z.testzip() is None'
+          python -c 'import os,zipfile,json; p=os.environ["E2E_PACKAGE"]; z=zipfile.ZipFile(p); names=set(z.namelist()); required={"LogForwarderApp.dll","LogForwarderApp.deps.json","dnsApp.config","Serilog.Sinks.ClickHouse.dll","ClickHouse.Driver.dll","Serilog.dll","Serilog.Sinks.Dnstap.dll","Dnstap.dll","Google.Protobuf.dll"}; assert required.issubset(names), (p, required-names); deps=json.loads(z.read("LogForwarderApp.deps.json")); libraries=deps["libraries"]; assert all(any(k.lower().startswith(n.lower()+"/") for k in libraries) for n in ("Serilog.Sinks.Dnstap","Dnstap.NET","Google.Protobuf")), list(libraries); assert z.testzip() is None'
 
       - name: Prepare isolated test environment
         run: |
@@ -104,4 +104,4 @@ jobs:
 
       - name: Destroy test environment
         if: always()
-        run: docker compose -f tests/e2e/compose.yml down --volumes --remove-orphans
+        run: E2E_ADMIN_PASSWORD=${E2E_ADMIN_PASSWORD:-teardown-only} docker compose -f tests/e2e/compose.yml down --volumes --remove-orphans
