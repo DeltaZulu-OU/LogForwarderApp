@@ -12,7 +12,7 @@ namespace LogForwarderApp.Tests;
 
 internal static class TestFixtures
 {
-    internal static LogEntry CreateLogEntry(string name)
+    internal static LogEntry CreateLogEntry(string name, bool captureDnstap = false)
     {
         var (request, response) = CreateDnsExchange(name);
 
@@ -21,7 +21,8 @@ internal static class TestFixtures
             new IPEndPoint(IPAddress.Loopback, 53000),
             DnsTransportProtocol.Udp,
             request,
-            response);
+            response,
+            captureDnstap: captureDnstap);
     }
 
     internal static (DnsDatagram Request, DnsDatagram Response) CreateDnsExchange(string name)

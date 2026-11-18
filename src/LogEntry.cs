@@ -46,12 +46,13 @@ namespace LogForwarder
             {
                 try
                 {
-                    DnstapObservation = DnstapObservation.Capture(remoteEP, protocol, request, response);
+                    DnstapCapture = DnstapObservation.Capture(remoteEP, protocol, request, response);
                 }
-                catch (System.Exception)
+                catch (System.Exception ex)
                 {
-                    // Packet capture must not interrupt normal DNS query logging.
-                    // P3 will report capture failures through the DNSTap worker.
+                    // Keep ordinary log delivery independent of optional DNS serialization.
+                    // The DNSTap worker can report this failure once it is registered.
+                    DnstapCaptureError = ex;
                 }
             }
 
@@ -146,7 +147,10 @@ namespace LogForwarder
 
         // Not serialized with existing JSON sinks; no packet capture without explicit opt-in.
         [JsonIgnore]
-        internal DnstapObservation? DnstapObservation { get; }
+        internal DnstapObservation? DnstapCapture { get; }
+
+        [JsonIgnore]
+        internal System.Exception? DnstapCaptureError { get; }
 
         public DnsResourceRecord[] Answers { get; }
 

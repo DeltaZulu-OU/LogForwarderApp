@@ -16,7 +16,7 @@ namespace LogForwarder
         internal static global::Dnstap.Dnstap Convert(LogEntry entry)
         {
             ArgumentNullException.ThrowIfNull(entry);
-            var observation = entry.DnstapObservation
+            var observation = entry.DnstapCapture
                 ?? throw new InvalidOperationException("DNSTap capture was not enabled for this log entry.");
 
             return Factory.Create(new DnsLogEntry
