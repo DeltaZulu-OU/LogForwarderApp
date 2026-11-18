@@ -50,8 +50,8 @@ public sealed class DnstapRecordConverterTests
         using var output = new MemoryStream(record.Message.ResponseMessage.ToByteArray());
         var decodedQuery = DnsDatagram.ReadFrom(input);
         var decodedResponse = DnsDatagram.ReadFrom(output);
-        Assert.AreEqual(query.ID, decodedQuery.ID);
-        Assert.AreEqual(response.ID, decodedResponse.ID);
+        Assert.AreEqual(query.Identifier, decodedQuery.Identifier);
+        Assert.AreEqual(response.Identifier, decodedResponse.Identifier);
     }
 
     [TestMethod]
