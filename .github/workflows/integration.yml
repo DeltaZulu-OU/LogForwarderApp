@@ -2,7 +2,7 @@ name: End-to-End Integration Tests
 
 on:
   push:
-    branches: [master, feature/dnstap-observation-model]
+    branches: [master]
   workflow_dispatch:
   pull_request:
     paths:
