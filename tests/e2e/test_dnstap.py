@@ -90,3 +90,20 @@ def test_disabling_dnstap_preserves_http_and_stops_capture(runtime, unique_name)
     # This unique name was never captured during a DNSTap-enabled configuration.
     time.sleep(0.5)
     assert not any(matches_name(r, unique_name) for r in records())
+
+def test_unavailable_collector_does_not_block_other_sinks(runtime, unique_name):
+    config = runtime.config()
+    config["sinks"]["dnstap"] = {
+        "enabled": True,
+        "host": "127.0.0.1",
+        "port": 65534,
+        "connectionTimeoutMs": 300,
+        "operationTimeoutMs": 300,
+        "reconnectIntervalMs": 200,
+        "batching": {"batchSize": 1, "batchDelayMs": 20, "retryTimeLimitMs": 0},
+    }
+    runtime.set_config(config)
+    assert "status: NOERROR" in probe(unique_name)
+    assert runtime.event(unique_name)["question"]["questionName"] == unique_name
+    # This collector endpoint is deliberately unbound in the test container.
+    assert not any(matches_name(r, unique_name) for r in records())

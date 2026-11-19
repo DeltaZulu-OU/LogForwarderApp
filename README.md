@@ -12,21 +12,46 @@ It uses a bounded asynchronous pipeline: query log events are received, optional
 
 > Last tested with Technitium DNS Server 15.6.2.
 
-## DNSTap integration (development branch)
+## DNSTap TCP output (1.1.0)
 
-The next release will support DNSTap as an additional output. P1/P2 introduce an **opt-in** in-memory observation snapshot and a tested converter to the Dnstap.NET 0.2.0 record model. The TCP adapter and optional `sinks.dnstap` configuration are implemented on this branch. The adapter sends typed records directly through `Serilog.Sinks.Dnstap` 0.1.0, using the existing independent LogForwarder sink worker without another queue or automatic batch replay.
+An optional `dnstap` sink forwards completed client-facing DNS responses to a Frame Streams collector over TCP. It uses [Serilog.Sinks.Dnstap](https://github.com/DeltaZulu-OU/Serilog.Sinks.Dnstap) 0.1.0 and [Dnstap.NET](https://github.com/DeltaZulu-OU/Dnstap.NET) 0.2.0. Each destination retains its own bounded queue in LogForwarderApp; the adapter does not create another Serilog logger, queue, or retry scheduler.
 
-The capture uses `DnsDatagram.WriteTo(Stream)` to serialize the query and response. These are valid serialized DNS messages, **not guaranteed bit-for-bit copies of the original network packets**. It preserves the client address and source port plus the completed-response timestamp. The local responder endpoint and query timestamp are not exposed by `IDnsQueryLogger` and are left unset. CLIENT_RESPONSE describes the client-facing reply rather than upstream recursive activity. Packet serialization is disabled by default and leaves existing JSON exports unchanged.
+Configure it alongside existing sinks:
 
-This adds the `Dnstap.NET` 0.2.0 and `Serilog.Sinks.Dnstap` 0.1.0 package dependencies, restored from the authenticated DeltaZulu GitHub Packages feed. CI needs `packages: read` access to that package.
+```json
+{
+  "sinks": {
+    "dnstap": {
+      "enabled": true,
+      "host": "dnstap-collector.example.com",
+      "port": 6000,
+      "connectionTimeoutMs": 10000,
+      "operationTimeoutMs": 30000,
+      "reconnectIntervalMs": 5000,
+      "batching": {
+        "batchSize": 1000,
+        "batchDelayMs": 25,
+        "retryTimeLimitMs": 0
+      }
+    }
+  },
+  "pipeline": {}
+}
+```
 
-The DNSTap TCP configuration is optional and defaults to disabled. Example: `"dnstap": { "enabled": true, "host": "127.0.0.1", "port": 6000, "connectionTimeoutMs": 10000, "operationTimeoutMs": 30000, "reconnectIntervalMs": 5000, "batching": { "batchSize": 1000, "batchDelayMs": 25, "retryTimeLimitMs": 0 } }`. The sink must not replay batches because a failure can occur after some frames have been delivered. DNS capture is activated only after the sink has registered successfully. `IOutputSink.ForwardAsync` has a cancellation token, but the underlying Serilog batch API has no cancellation parameter; the 30-second application drain is not a strict bound on DNSTap shutdown.
+The section is disabled when omitted. Set `enabled: false` to retain a placeholder without capturing DNS packets. The endpoint must be reachable from the Technitium process; the DNSTap TCP transport does **not** encrypt traffic, so use an appropriate trusted or separately protected connection.
+
+The output uses the standard `CLIENT_RESPONSE` event type for the client-facing completed exchange. `query_message` and `response_message` are reconstructed using Technitium's `DnsDatagram.WriteTo()`, **not guaranteed byte-for-byte original network captures**. The record includes the client address, port, transport, and response timestamp. The query timestamp and responding server address/port are omitted because the logging callback does not reliably provide them. Upstream recursive transactions are not represented. The serialized packets are captured only while DNSTap is successfully enabled; other JSON sinks preserve their existing output.
+
+DNSTap cannot replay batches safely after ambiguous transport failures. The sink forwards without whole-batch retries and uses its own reconnect cooldown for future records; the dispatcher may mark an entire partially delivered batch as unconfirmed. `connectionTimeoutMs` bounds TCP connection attempts and `operationTimeoutMs` bounds individual writer operations, **not overall shutdown duration**. The application's 30-second drain limit does not guarantee bounded synchronous DNSTap disposal.
+
+Building from source requires authenticated access to the DeltaZulu GitHub Packages feed with permission to read both packages. Release ZIPs contain the runtime DLLs, so installed Technitium instances do not need NuGet credentials.
 
 ## Features
 
 - Receives completed DNS queries and responses through the Technitium DNS Server `IDnsQueryLogger` interface.
 - Uses bounded processing stages and an independent bounded ingress queue for each sink, preventing one slow sink from blocking the others or causing unbounded memory growth.
-- Exports logs through pluggable sinks: console, file, HTTP POST, Syslog, and ClickHouse.
+- Exports logs through pluggable sinks: console, file, HTTP POST, Syslog, ClickHouse, and DNSTap over TCP.
 - Supports optional pipeline processors before export:
   - domain normalization with Public Suffix List based metadata;
   - static tag injection for downstream routing or tenant identification.
@@ -38,6 +63,8 @@ The DNSTap TCP configuration is optional and defaults to disabled. Example: `"dn
 ## Renaming and upgrade notes
 
 **Renamed on 5 November 2026:** This independently maintained application was renamed from `LogExporterApp` to **`LogForwarderApp`** to distinguish it from Technitium DNS Server's built-in/App Store **Log Exporter App**. The version numbering restarts at **1.0.0** under the new application identity; this is not a downgrade of the previous DeltaZulu releases. The rename and GUI update risk were discussed with Shreyas Zare in [Technitium DNS Server discussion #2203](https://github.com/TechnitiumSoftware/DnsServer/discussions/2203).
+
+**For existing LogForwarderApp 1.0.0 installations:** 1.1.0 adds the optional DNSTap sink, which remains disabled unless explicitly configured. The existing sink settings stay valid. Retain a backup of the configuration before updating.
 
 **Important — do not use the GUI Update button on the old `LogExporterApp` installation.** The old application name overlaps with the Technitium-provided Log Exporter App, so an update from the GUI may select the upstream application and replace the independently maintained version, potentially disrupting configuration or delivery. The renamed app uses a distinct application/assembly/package identity. Install `LogForwarderApp-1.0.0.zip` as a separate application, explicitly transfer the existing JSON configuration, verify configured sinks, and then remove the old instance to avoid duplicate logs. Technitium does not automatically migrate the old application identity or configuration. The configuration schema and log delivery behavior are otherwise unchanged by the rename.
 
@@ -81,6 +108,11 @@ Provide JSON configuration similar to the following:
       "address": "syslog.example.com",
       "port": 6514,
       "protocol": "TLS"
+    },
+    "dnstap": {
+      "enabled": false,
+      "host": "dnstap-collector.example.com",
+      "port": 6000
     },
     "clickhouse": {
       "enabled": false,
@@ -137,6 +169,7 @@ opt into HTTP whole-batch replay by changing only the HTTP sink setting:
 * `file` writes logs to the configured local file path.
 * `http` sends batches to the configured endpoint using HTTP POST as newline-delimited JSON (NDJSON). HTTP records include the responding server's hostname.
 * `clickhouse` exports DNS events through the official [Serilog.Sinks.ClickHouse](https://github.com/ClickHouse/Serilog.Sinks.ClickHouse) adapter and ClickHouse driver. It requires an existing, externally managed table; it does not create or migrate the schema. The table must provide Serilog's `timestamp`, `level`, `message`, `message_template`, `exception` and `properties` columns, plus `client_ip`, `q_name`, `q_type`, `response_code`, `response_type` and `payload_json`. The last column preserves the complete DNS log as JSON text. Set `connectionString`, `database` and `table` as shown above; `Protocol=https` uses HTTPS, and credentials in the connection string must be protected. Use a dedicated account with insert and table-inspection permissions. The integration is tested against ClickHouse 25.8; older installations may require enabling support for the native `JSON` type. ClickHouse whole-batch replay is not supported: `allowBatchReplay: true` is rejected, and an in-flight insert cannot reliably be cancelled through the upstream Serilog batch API.
+* `dnstap` exports reconstructed DNS packets and event metadata over Frame Streams TCP to a DNSTap collector. The default is disabled and it does not support whole-batch replay. See the DNSTap section above.
 * `syslog` exports logs through Syslog. Supported protocols are `UDP`, `TCP`, `TLS`, and `LOCAL`.
   * For normal host installations, prefer `LOCAL` and let the operating system's Syslog daemon, such as rsyslog or an equivalent implementation, handle remote forwarding, buffering, retry, and transport policy. The app intentionally does not try to duplicate those responsibilities. `LOCAL` is available on supported Unix-like hosts and ignores `address`.
   * In containers, prefer `console` when your platform already collects standard output. A sidecar or the platform's logging infrastructure can then handle forwarding and delivery policy. If that is not available or not desired, configure `UDP`, `TCP`, or `TLS` to send directly to a remote Syslog target.
@@ -144,7 +177,7 @@ opt into HTTP whole-batch replay by changing only the HTTP sink setting:
   * An FQDN is resolved once the DNS server starts answering queries, not while the app loads. If resolution is temporarily unavailable, the Syslog sink retries in the background with capped exponential backoff and jitter until resolution succeeds or the sink is disposed. With `UDP`, the successfully resolved address is kept for the lifetime of the sink. If the Syslog server's IP address changes, restart Technitium DNS Server or reload the Log Forwarder configuration so the target is resolved again. `TCP` and `TLS` resolve the name again whenever they reconnect.
   * For `TCP` and `TLS`, an ambiguous write failure may cause the current record to be retried even if the remote peer already received it. Direct remote Syslog therefore favors avoiding loss over avoiding duplicates.
 
-Each sink uses an independent bounded in-memory queue and configurable `batching` settings. The retry budget applies only where whole-batch replay is explicitly enabled; it is not a universal export timeout. File, console and Syslog sinks do not replay whole batches through the dispatcher, as an interrupted operation may already have delivered some records. HTTP replay is opt-in and may duplicate records when an acknowledgment is lost; HTTP 408/429, HTTP 5xx and connection failures are eligible for retry, but HTTP 400 is not. The dispatcher maintains in-memory delivery counters through `SinkDispatcher.GetCounters(Type)`, not a durable audit log or metrics endpoint. Delivery remains best-effort: queue overflow, crashes, failed destinations and forced shutdown may cause losses; exactly-once and guaranteed at-least-once delivery are not provided.
+Each sink uses an independent bounded in-memory queue and configurable `batching` settings. The retry budget applies only where whole-batch replay is explicitly enabled; it is not a universal export timeout. File, console, DNSTap and Syslog sinks do not replay whole batches through the dispatcher, as an interrupted operation may already have delivered some records. HTTP replay is opt-in and may duplicate records when an acknowledgment is lost; HTTP 408/429, HTTP 5xx and connection failures are eligible for retry, but HTTP 400 is not. The dispatcher maintains in-memory delivery counters through `SinkDispatcher.GetCounters(Type)`, not a durable audit log or metrics endpoint. Delivery remains best-effort: queue overflow, crashes, failed destinations and forced shutdown may cause losses; exactly-once and guaranteed at-least-once delivery are not provided.
 
 Individual sink sections may be omitted entirely. An omitted sink is disabled. When a sink section is present, its sink-specific required values are validated only if that sink is enabled. For example, a disabled or omitted HTTP sink does not require an `endpoint`.
 
